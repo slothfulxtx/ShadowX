@@ -100,7 +100,7 @@ class Server(socketserver.StreamRequestHandler):
 
 
 if __name__ == '__main__':
-    with open('config.json', 'r') as f:
+    with open('server_config.json', 'r') as f:
         config = json.load(f)
     logging.basicConfig(level=logging.DEBUG, format='%(asctime)s %(levelname)-4s %(message)s',
                         datefmt='%Y-%m-%d %H:%M:%S', filemode='a+')

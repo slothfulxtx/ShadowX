@@ -24,6 +24,7 @@ def get_chr_map(password):
 
 encrypt_table, decrypt_table = None, None
 REMOTE_IP, REMOTE_PORT = None, None
+SOCKS5_USERNAME, SOCKS5_PASSWORD = None, None
 
 
 class ThreadingTCPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
@@ -37,13 +38,44 @@ class Server(socketserver.StreamRequestHandler):
     def decrypt_data(self, data):
         return data.translate(decrypt_table)
 
+    def verify_auth(self):
+        version = self.connection.recv(1)[0]
+        assert version == 1
+        username_len = self.connection.recv(1)[0]
+        username = self.connection.recv(username_len).decode('utf-8')
+        password_len = self.connection.recv(1)[0]
+        password = self.connection.recv(password_len).decode('utf-8')
+        if username == SOCKS5_USERNAME and password == SOCKS5_PASSWORD:
+            response = struct.pack("!BB", version, 0)
+            self.connection.sendall(response)
+            return True
+        response = struct.pack("!BB", version, 0xFF)
+        self.connection.sendall(response)
+        self.server.close_request(self.request)
+        return False
+
     def handle(self):
         try:
             sock = self.connection        # local socket [127.1:port]
             # print(type(sock))
-            sock.recv(262)                # Sock5 Verification packet
+            # sock.recv(262)                # Sock5 Verification packet
             # Sock5 Response: '0x05' Version 5; '0x00' NO AUTHENTICATION REQUIRED
-            sock.send(b"\x05\x00")
+            # sock.send(b"\x05\x00")
+
+            header = sock.recv(2)
+            version, num_method = header[0], header[1]
+            assert version == 5
+            assert num_method > 0
+            methods = []
+            for i in range(num_method):
+                methods.append(sock.recv(1)[0])
+            if 2 not in set(methods):
+                self.server.close_request(self.request)
+                return
+            sock.send(b"\x05\x02")
+            if not self.verify_auth():
+                return
+
             # After Authentication negotiation
             # Forward request format: VER CMD RSV ATYP (4 bytes)
             data = self.rfile.read(4)  # bytes obj
@@ -135,7 +167,7 @@ class Server(socketserver.StreamRequestHandler):
 if __name__ == '__main__':
     # print(get_chr_map('123456'))
 
-    with open('config.json', 'r') as f:
+    with open('client_config.json', 'r') as f:
         config = json.load(f)
     logging.basicConfig(level=logging.DEBUG, format='%(asctime)s %(levelname)-4s %(message)s',
                         datefmt='%Y-%m-%d %H:%M:%S', filemode='a+')
@@ -148,6 +180,8 @@ if __name__ == '__main__':
     # assert s == s.translate(encrypt_table).translate(decrypt_table)
     REMOTE_IP = config['server_ip']
     REMOTE_PORT = config['server_port']
+    SOCKS5_USERNAME = config['socks5_username']
+    SOCKS5_PASSWORD = config['socks5_password']
     try:
         server = ThreadingTCPServer(('', config['client_port']), Server)
         logging.info('starting client at port %d ...' % config['client_port'])

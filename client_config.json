@@ -3,5 +3,6 @@
     "server_port": 8082,
     "client_port": 1030,
     "password": "123456",
-    "timeout": 600
+    "socks5_username": "yahalo",
+    "socks5_password": "123456"
 }
